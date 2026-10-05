@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Блок 54 · 3D модел</title>
+  <link href="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="panel">
+      <div class="brand">3D модел · Блок 54</div>
+      <div id="loadState" class="load-state">Зареждане…</div>
+
+      <section class="group">
+        <div class="group-title">Изгледи</div>
+        <div class="btn-grid two">
+          <button id="homeBtn">Общ изглед</button>
+          <button id="topBtn">Отгоре</button>
+          <button id="frontBtn">Отпред</button>
+          <button id="backBtn">Отзад</button>
+          <button id="leftBtn">Отляво</button>
+          <button id="rightBtn">Отдясно</button>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Измерване</div>
+        <div class="btn-grid two">
+          <button id="measureBtn" aria-pressed="false">Разстояние</button>
+          <button id="areaBtn" aria-pressed="false">Площ</button>
+          <button id="clearBtn">Изчисти</button>
+          <button id="fullscreenBtn">Цял екран</button>
+        </div>
+        <div id="measureHint" class="hint" hidden></div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Бележки</div>
+        <div class="btn-grid two">
+          <button id="addNoteBtn" aria-pressed="false">Добави бележка</button>
+          <button id="toggleNotesBtn" aria-pressed="true">Скрий бележки</button>
+          <button id="exportNotesBtn">Експорт</button>
+          <label class="file-btn">
+            Импорт
+            <input id="importNotesInput" type="file" accept="application/json" hidden>
+          </label>
+        </div>
+        <div id="notesHint" class="hint">Кликни „Добави бележка“ и после върху модела.</div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Детайлност</div>
+        <div class="segmented" id="detailSegment">
+          <button data-detail="standard" class="active">Стандартна</button>
+          <button data-detail="high">Висока</button>
+          <button data-detail="max">Максимална</button>
+        </div>
+      </section>
+
+      <section class="group small-text">
+        <div class="group-title">Указания</div>
+        <ul>
+          <li>Ляв бутон: въртене / избор</li>
+          <li>Десен бутон: преместване</li>
+          <li>Скрол: приближаване</li>
+          <li>Площ: слагаш точки, десен бутон завършва контура</li>
+          <li>Escape: изключва активния режим</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="viewer-wrap">
+      <div id="cesiumContainer"></div>
+      <div class="badge">3D заснемане</div>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Cesium.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
