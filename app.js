@@ -61,11 +61,58 @@
   cameraController.inertiaTranslate = 0;
   cameraController.inertiaZoom = 0;
   cameraController.enableLook = false;
+  // HARD CAMERA LOCK v4:
+  // Rotation/tilt are enabled ONLY while the relevant mouse button is physically held.
+  cameraController.enableRotate = false;
+  cameraController.enableTilt = false;
+  cameraController.enableZoom = true;
+  cameraController.enableTranslate = true;
   viewer.clock.shouldAnimate = false;
   viewer.trackedEntity = undefined;
   viewer.scene.tweens.removeAll();
   // Disable Cesium's default double-click entity tracking/zoom action.
   viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+  const cameraCanvas = viewer.scene.canvas;
+  let cameraGestureActive = false;
+
+  function hardStopCameraGesture() {
+    cameraGestureActive = false;
+    cameraController.enableRotate = false;
+    cameraController.enableTilt = false;
+    viewer.camera.cancelFlight();
+    viewer.trackedEntity = undefined;
+    viewer.scene.tweens.removeAll();
+    viewer.scene.requestRender();
+  }
+
+  cameraCanvas.addEventListener('pointerdown', (event) => {
+    cameraGestureActive = true;
+    viewer.camera.cancelFlight();
+    viewer.scene.tweens.removeAll();
+    cameraController.enableRotate = event.button === 0;
+    cameraController.enableTilt = event.button === 1;
+  }, true);
+
+  window.addEventListener('pointerup', () => {
+    window.setTimeout(hardStopCameraGesture, 0);
+  }, false);
+  window.addEventListener('pointercancel', hardStopCameraGesture, false);
+  window.addEventListener('mouseup', () => {
+    window.setTimeout(hardStopCameraGesture, 0);
+  }, false);
+  window.addEventListener('blur', hardStopCameraGesture, false);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) hardStopCameraGesture();
+  });
+
+  cameraCanvas.addEventListener('pointermove', (event) => {
+    if (cameraGestureActive && event.buttons === 0) hardStopCameraGesture();
+  }, true);
+
+  cameraCanvas.addEventListener('mouseleave', (event) => {
+    if (event.buttons === 0) hardStopCameraGesture();
+  }, false);
 
   let tileset = null;
   let mode = 'none'; // none | distance | area | addNote
@@ -443,7 +490,7 @@
       viewer.scene.primitives.add(tileset);
       tileset.maximumMemoryUsage = isMobile ? 384 : 1024;
       setDirectionalView('home');
-      setLoadState('Моделът е готов · NO-SPIN v3', 'ok');
+      setLoadState('Моделът е готов · HARD-LOCK v4', 'ok');
       renderNotes();
       requestRender();
     } catch (error) {
@@ -581,6 +628,6 @@
     if (event.key === 'Escape') deactivateModes();
   });
 
-  console.info('[Block54 viewer] NO-SPIN v3 loaded');
+  console.info('[Block54 viewer] HARD-LOCK v4 loaded');
   loadTileset();
 })();
