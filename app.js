@@ -60,6 +60,10 @@
   cameraController.inertiaSpin = 0;
   cameraController.inertiaTranslate = 0;
   cameraController.inertiaZoom = 0;
+  cameraController.enableLook = false;
+  viewer.clock.shouldAnimate = false;
+  viewer.trackedEntity = undefined;
+  viewer.scene.tweens.removeAll();
   // Disable Cesium's default double-click entity tracking/zoom action.
   viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
@@ -251,7 +255,97 @@
     requestRender();
   }
 
+  // Stable model-centred views using absolute ECEF camera coordinates.
+  // No lookAtTransform(), no tracked entity, no camera flight and no camera tween.
+  function stopAutomaticCameraMotion() {
+    viewer.camera.cancelFlight();
+    viewer.trackedEntity = undefined;
+    viewer.clock.shouldAnimate = false;
+    viewer.scene.tweens.removeAll();
+  }
+
+  function scaled(v, k) {
+    return Cesium.Cartesian3.multiplyByScalar(v, k, new Cesium.Cartesian3());
+  }
+
+  function added(a, b) {
+    return Cesium.Cartesian3.add(a, b, new Cesium.Cartesian3());
+  }
+
+  function setCameraFromOffset(center, offset, upHint) {
+    stopAutomaticCameraMotion();
+
+    const destination = added(center, offset);
+    const direction = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+
+    // Make sure the supplied up vector is perpendicular to the viewing direction.
+    const right = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.cross(direction, upHint, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    const cameraUp = Cesium.Cartesian3.normalize(
+      Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+
+    viewer.camera.setView({
+      destination,
+      orientation: {
+        direction,
+        up: cameraUp
+      }
+    });
+
+    stopAutomaticCameraMotion();
+    requestRender();
+  }
+
+  function setDirectionalView(kind) {
+    if (!tileset) return;
+
+    const sphere = tileset.boundingSphere;
+    const center = Cesium.Cartesian3.clone(sphere.center);
+    const distance = Math.max(sphere.radius * 2.65, 10);
+
+    const enu = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+    const rotation = Cesium.Matrix4.getMatrix3(enu, new Cesium.Matrix3());
+    const east = Cesium.Matrix3.getColumn(rotation, 0, new Cesium.Cartesian3());
+    const north = Cesium.Matrix3.getColumn(rotation, 1, new Cesium.Cartesian3());
+    const up = Cesium.Matrix3.getColumn(rotation, 2, new Cesium.Cartesian3());
+
+    if (kind === 'top') {
+      setCameraFromOffset(center, scaled(up, distance), north);
+      return;
     }
+
+    if (kind === 'front') {
+      setCameraFromOffset(center, scaled(north, distance), up);
+      return;
+    }
+
+    if (kind === 'back') {
+      setCameraFromOffset(center, scaled(north, -distance), up);
+      return;
+    }
+
+    if (kind === 'left') {
+      setCameraFromOffset(center, scaled(east, -distance), up);
+      return;
+    }
+
+    if (kind === 'right') {
+      setCameraFromOffset(center, scaled(east, distance), up);
+      return;
+    }
+
+    // Home: oblique 3/4 view.
+    const horizontal = added(scaled(east, distance * 0.70), scaled(north, distance * 0.70));
+    const homeOffset = added(horizontal, scaled(up, distance * 0.52));
+    setCameraFromOffset(center, homeOffset, up);
+  }
 
   function getStoredNotes() {
     try {
@@ -349,7 +443,7 @@
       viewer.scene.primitives.add(tileset);
       tileset.maximumMemoryUsage = isMobile ? 384 : 1024;
       setDirectionalView('home');
-      setLoadState('Моделът е готов · версия 2', 'ok');
+      setLoadState('Моделът е готов · NO-SPIN v3', 'ok');
       renderNotes();
       requestRender();
     } catch (error) {
@@ -483,12 +577,10 @@
     btn.addEventListener('click', () => updateDetail(btn.dataset.detail));
   });
 
-  viewer.camera.moveStart.addEventListener(requestRender);
-  viewer.camera.changed.addEventListener(requestRender);
-  viewer.camera.moveEnd.addEventListener(requestRender);
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') deactivateModes();
   });
 
+  console.info('[Block54 viewer] NO-SPIN v3 loaded');
   loadTileset();
 })();
