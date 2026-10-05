@@ -251,25 +251,7 @@
     requestRender();
   }
 
-  // Instant, model-centred views. Range 0 fits the entire bounding sphere.
-  function setDirectionalView(kind) {
-    if (!tileset) return;
-    const headings = { home: 35, top: 0, front: 0, back: 180, left: 90, right: 270 };
-    const pitch = kind === 'top' ? -90 : (kind === 'home' ? -30 : -10);
-    viewer.camera.cancelFlight();
-    viewer.trackedEntity = undefined;
-    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-    viewer.camera.viewBoundingSphere(
-      tileset.boundingSphere,
-      new Cesium.HeadingPitchRange(
-        Cesium.Math.toRadians(headings[kind] ?? 35),
-        Cesium.Math.toRadians(pitch),
-        0
-      )
-    );
-    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-    requestRender();
-  }
+    }
 
   function getStoredNotes() {
     try {
