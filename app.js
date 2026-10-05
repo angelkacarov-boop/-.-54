@@ -55,64 +55,8 @@
   viewer.scene.fog.enabled = false;
   viewer.scene.pickTranslucentDepth = true;
   viewer.scene.postProcessStages.fxaa.enabled = true;
-  const cameraController = viewer.scene.screenSpaceCameraController;
-  cameraController.minimumZoomDistance = 0.2;
-  cameraController.inertiaSpin = 0;
-  cameraController.inertiaTranslate = 0;
-  cameraController.inertiaZoom = 0;
-  cameraController.enableLook = false;
-  // HARD CAMERA LOCK v4:
-  // Rotation/tilt are enabled ONLY while the relevant mouse button is physically held.
-  cameraController.enableRotate = false;
-  cameraController.enableTilt = false;
-  cameraController.enableZoom = true;
-  cameraController.enableTranslate = true;
-  viewer.clock.shouldAnimate = false;
-  viewer.trackedEntity = undefined;
-  viewer.scene.tweens.removeAll();
-  // Disable Cesium's default double-click entity tracking/zoom action.
-  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
-
-  const cameraCanvas = viewer.scene.canvas;
-  let cameraGestureActive = false;
-
-  function hardStopCameraGesture() {
-    cameraGestureActive = false;
-    cameraController.enableRotate = false;
-    cameraController.enableTilt = false;
-    viewer.camera.cancelFlight();
-    viewer.trackedEntity = undefined;
-    viewer.scene.tweens.removeAll();
-    viewer.scene.requestRender();
-  }
-
-  cameraCanvas.addEventListener('pointerdown', (event) => {
-    cameraGestureActive = true;
-    viewer.camera.cancelFlight();
-    viewer.scene.tweens.removeAll();
-    cameraController.enableRotate = event.button === 0;
-    cameraController.enableTilt = event.button === 1;
-  }, true);
-
-  window.addEventListener('pointerup', () => {
-    window.setTimeout(hardStopCameraGesture, 0);
-  }, false);
-  window.addEventListener('pointercancel', hardStopCameraGesture, false);
-  window.addEventListener('mouseup', () => {
-    window.setTimeout(hardStopCameraGesture, 0);
-  }, false);
-  window.addEventListener('blur', hardStopCameraGesture, false);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) hardStopCameraGesture();
-  });
-
-  cameraCanvas.addEventListener('pointermove', (event) => {
-    if (cameraGestureActive && event.buttons === 0) hardStopCameraGesture();
-  }, true);
-
-  cameraCanvas.addEventListener('mouseleave', (event) => {
-    if (event.buttons === 0) hardStopCameraGesture();
-  }, false);
+  viewer.scene.globe.show = false;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 0.2;
 
   let tileset = null;
   let mode = 'none'; // none | distance | area | addNote
@@ -302,96 +246,54 @@
     requestRender();
   }
 
-  // Stable model-centred views using absolute ECEF camera coordinates.
-  // No lookAtTransform(), no tracked entity, no camera flight and no camera tween.
-  function stopAutomaticCameraMotion() {
-    viewer.camera.cancelFlight();
-    viewer.trackedEntity = undefined;
-    viewer.clock.shouldAnimate = false;
-    viewer.scene.tweens.removeAll();
-  }
-
-  function scaled(v, k) {
-    return Cesium.Cartesian3.multiplyByScalar(v, k, new Cesium.Cartesian3());
-  }
-
-  function added(a, b) {
-    return Cesium.Cartesian3.add(a, b, new Cesium.Cartesian3());
-  }
-
-  function setCameraFromOffset(center, offset, upHint) {
-    stopAutomaticCameraMotion();
-
-    const destination = added(center, offset);
-    const direction = Cesium.Cartesian3.normalize(
-      Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()),
-      new Cesium.Cartesian3()
-    );
-
-    // Make sure the supplied up vector is perpendicular to the viewing direction.
-    const right = Cesium.Cartesian3.normalize(
-      Cesium.Cartesian3.cross(direction, upHint, new Cesium.Cartesian3()),
-      new Cesium.Cartesian3()
-    );
-    const cameraUp = Cesium.Cartesian3.normalize(
-      Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
-      new Cesium.Cartesian3()
-    );
-
-    viewer.camera.setView({
-      destination,
-      orientation: {
-        direction,
-        up: cameraUp
-      }
-    });
-
-    stopAutomaticCameraMotion();
-    requestRender();
+  function getViewTransformData() {
+    const sphere = tileset.boundingSphere;
+    const center = sphere.center;
+    const radius = sphere.radius;
+    const transform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+    const east = Cesium.Matrix4.getColumn(transform, 0, new Cesium.Cartesian4());
+    const north = Cesium.Matrix4.getColumn(transform, 1, new Cesium.Cartesian4());
+    const up = Cesium.Matrix4.getColumn(transform, 2, new Cesium.Cartesian4());
+    const E = new Cesium.Cartesian3(east.x, east.y, east.z);
+    const N = new Cesium.Cartesian3(north.x, north.y, north.z);
+    const U = new Cesium.Cartesian3(up.x, up.y, up.z);
+    return { center, radius, E, N, U };
   }
 
   function setDirectionalView(kind) {
     if (!tileset) return;
-
-    const sphere = tileset.boundingSphere;
-    const center = Cesium.Cartesian3.clone(sphere.center);
-    const distance = Math.max(sphere.radius * 2.65, 10);
-
-    const enu = Cesium.Transforms.eastNorthUpToFixedFrame(center);
-    const rotation = Cesium.Matrix4.getMatrix3(enu, new Cesium.Matrix3());
-    const east = Cesium.Matrix3.getColumn(rotation, 0, new Cesium.Cartesian3());
-    const north = Cesium.Matrix3.getColumn(rotation, 1, new Cesium.Cartesian3());
-    const up = Cesium.Matrix3.getColumn(rotation, 2, new Cesium.Cartesian3());
+    const { center, radius, E, N, U } = getViewTransformData();
+    const side = radius * 2.6;
+    const top = radius * 2.2;
+    let destination;
+    let orientation;
 
     if (kind === 'top') {
-      setCameraFromOffset(center, scaled(up, distance), north);
-      return;
+      destination = Cesium.Cartesian3.add(center, Cesium.Cartesian3.multiplyByScalar(U, top, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+      orientation = { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 };
+    } else if (kind === 'front') {
+      destination = Cesium.Cartesian3.add(center,
+        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(N, -side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.45, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        new Cesium.Cartesian3());
+      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
+    } else if (kind === 'back') {
+      destination = Cesium.Cartesian3.add(center,
+        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(N, side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.45, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        new Cesium.Cartesian3());
+      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
+    } else if (kind === 'left') {
+      destination = Cesium.Cartesian3.add(center,
+        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(E, -side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.35, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        new Cesium.Cartesian3());
+      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
+    } else if (kind === 'right') {
+      destination = Cesium.Cartesian3.add(center,
+        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(E, side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.35, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
+        new Cesium.Cartesian3());
+      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
     }
 
-    if (kind === 'front') {
-      setCameraFromOffset(center, scaled(north, distance), up);
-      return;
-    }
-
-    if (kind === 'back') {
-      setCameraFromOffset(center, scaled(north, -distance), up);
-      return;
-    }
-
-    if (kind === 'left') {
-      setCameraFromOffset(center, scaled(east, -distance), up);
-      return;
-    }
-
-    if (kind === 'right') {
-      setCameraFromOffset(center, scaled(east, distance), up);
-      return;
-    }
-
-    // Home: oblique 3/4 view.
-    const horizontal = added(scaled(east, distance * 0.70), scaled(north, distance * 0.70));
-    const homeOffset = added(horizontal, scaled(up, distance * 0.52));
-    setCameraFromOffset(center, homeOffset, up);
+    viewer.camera.flyTo({ destination, orientation, duration: 0.9 });
   }
 
   function getStoredNotes() {
@@ -450,7 +352,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-   a.download = 'block54-notes.json';
+    a.download = 'block54-notes.json';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -489,8 +391,9 @@
 
       viewer.scene.primitives.add(tileset);
       tileset.maximumMemoryUsage = isMobile ? 384 : 1024;
-      setDirectionalView('home');
-      setLoadState('Моделът е готов · HARD-LOCK v4', 'ok');
+      await viewer.zoomTo(tileset);
+      viewer.camera.lookUp(Cesium.Math.toRadians(6));
+      setLoadState('Моделът е готов · STABLE ENGINE', 'ok');
       renderNotes();
       requestRender();
     } catch (error) {
@@ -596,7 +499,7 @@
     else await document.exitFullscreen();
   });
 
-  viewBtns.home.addEventListener('click', () => setDirectionalView('home'));
+  viewBtns.home.addEventListener('click', async () => { if (tileset) await viewer.zoomTo(tileset); requestRender(); });
   viewBtns.top.addEventListener('click', () => setDirectionalView('top'));
   viewBtns.front.addEventListener('click', () => setDirectionalView('front'));
   viewBtns.back.addEventListener('click', () => setDirectionalView('back'));
@@ -624,10 +527,12 @@
     btn.addEventListener('click', () => updateDetail(btn.dataset.detail));
   });
 
+  viewer.camera.moveStart.addEventListener(requestRender);
+  viewer.camera.changed.addEventListener(requestRender);
+  viewer.camera.moveEnd.addEventListener(requestRender);
   window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') deactivateModes();
   });
 
-  console.info('[Block54 viewer] HARD-LOCK v4 loaded');
   loadTileset();
 })();
