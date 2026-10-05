@@ -14,59 +14,23 @@
       <div id="loadState" class="load-state">Зареждане…</div>
 
       <section class="group">
-        <div class="group-title">Изгледи</div>
+        <div class="group-title">Основни функции</div>
         <div class="btn-grid two">
           <button id="homeBtn">Общ изглед</button>
-          <button id="topBtn">Отгоре</button>
-          <button id="frontBtn">Отпред</button>
-          <button id="backBtn">Отзад</button>
-          <button id="leftBtn">Отляво</button>
-          <button id="rightBtn">Отдясно</button>
-        </div>
-      </section>
-
-      <section class="group">
-        <div class="group-title">Измерване</div>
-        <div class="btn-grid two">
           <button id="measureBtn" aria-pressed="false">Разстояние</button>
-          <button id="areaBtn" aria-pressed="false">Площ</button>
           <button id="clearBtn">Изчисти</button>
-          <button id="fullscreenBtn">Цял екран</button>
         </div>
         <div id="measureHint" class="hint" hidden></div>
       </section>
 
-      <section class="group">
-        <div class="group-title">Бележки</div>
-        <div class="btn-grid two">
-          <button id="addNoteBtn" aria-pressed="false">Добави бележка</button>
-          <button id="toggleNotesBtn" aria-pressed="true">Скрий бележки</button>
-          <button id="exportNotesBtn">Експорт</button>
-          <label class="file-btn">
-            Импорт
-            <input id="importNotesInput" type="file" accept="application/json" hidden>
-          </label>
-        </div>
-        <div id="notesHint" class="hint">Кликни „Добави бележка“ и после върху модела.</div>
-      </section>
-
-      <section class="group">
-        <div class="group-title">Детайлност</div>
-        <div class="segmented" id="detailSegment">
-          <button data-detail="standard" class="active">Стандартна</button>
-          <button data-detail="high">Висока</button>
-          <button data-detail="max">Максимална</button>
-        </div>
-      </section>
-
       <section class="group small-text">
-        <div class="group-title">Указания</div>
+        <div class="group-title">Управление</div>
         <ul>
-          <li>Ляв бутон: въртене / избор</li>
+          <li>Ляв бутон: въртене</li>
           <li>Десен бутон: преместване</li>
           <li>Скрол: приближаване</li>
-          <li>Площ: слагаш точки, десен бутон завършва контура</li>
-          <li>Escape: изключва активния режим</li>
+          <li>M: измерване</li>
+          <li>Escape: изход от измерване</li>
         </ul>
       </section>
     </aside>
@@ -78,6 +42,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Cesium.js"></script>
-  <script src="./app.js?v=fixed-lod-v5"></script>
+  <script src="./app.js?v=baseline-1"></script>
 </body>
 </html>
