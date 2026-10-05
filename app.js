@@ -260,12 +260,30 @@
   }
 
   function setDirectionalView(kind) {
-    if (!tileset) return;
-    const { center, radius, E, N, U } = getViewTransformData();
-    const side = radius * 2.6;
-    const top = radius * 2.2;
-    let destination;
-    let orientation;
+  if (!tileset) return;
+
+  const headings = {
+    top: 0,
+    front: 0,
+    back: 180,
+    left: 90,
+    right: 270
+  };
+
+  viewer.camera.cancelFlight();
+
+  viewer.camera.viewBoundingSphere(
+    tileset.boundingSphere,
+    new Cesium.HeadingPitchRange(
+      Cesium.Math.toRadians(headings[kind] ?? 0),
+      Cesium.Math.toRadians(kind === 'top' ? -90 : -10),
+      0
+    )
+  );
+
+  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+  viewer.scene.requestRender();
+}
 
     if (kind === 'top') {
       destination = Cesium.Cartesian3.add(center, Cesium.Cartesian3.multiplyByScalar(U, top, new Cesium.Cartesian3()), new Cesium.Cartesian3());
