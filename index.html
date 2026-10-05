@@ -4,17 +4,47 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Блок 54 · 3D модел</title>
+
   <link href="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
+
+  <style>
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#101216; }
+    #fatalError {
+      position: fixed; z-index: 99999; left: 16px; right: 16px; bottom: 16px;
+      padding: 12px 14px; border-radius: 10px; background: #3b1414; color: #fff;
+      font: 14px/1.35 Arial, sans-serif; display:none; white-space:pre-wrap;
+    }
+  </style>
+
+  <script>
+    window.__showFatal = function(message) {
+      const el = document.getElementById('fatalError');
+      if (el) {
+        el.style.display = 'block';
+        el.textContent = message;
+      }
+      const state = document.getElementById('loadState');
+      if (state) state.textContent = message;
+    };
+    window.addEventListener('error', function(e) {
+      window.__showFatal('JS грешка: ' + (e.message || 'неизвестна грешка'));
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      const msg = e.reason && e.reason.message ? e.reason.message : String(e.reason || 'неизвестна грешка');
+      window.__showFatal('Promise грешка: ' + msg);
+    });
+  </script>
 </head>
+
 <body>
   <div class="app-shell">
     <aside class="panel">
       <div class="brand">3D модел · Блок 54</div>
-      <div id="loadState" class="load-state">Зареждане…</div>
+      <div id="loadState" class="load-state">Стартиране…</div>
 
       <section class="group">
-        <div class="group-title">Основни функции</div>
+        <div class="group-title">Управление</div>
         <div class="btn-grid two">
           <button id="homeBtn">Общ изглед</button>
           <button id="measureBtn" aria-pressed="false">Разстояние</button>
@@ -24,13 +54,12 @@
       </section>
 
       <section class="group small-text">
-        <div class="group-title">Управление</div>
+        <div class="group-title">Информация</div>
         <ul>
           <li>Ляв бутон: въртене</li>
           <li>Десен бутон: преместване</li>
           <li>Скрол: приближаване</li>
-          <li>M: измерване</li>
-          <li>Escape: изход от измерване</li>
+          <li>LOD: стабилен режим</li>
         </ul>
       </section>
     </aside>
@@ -41,7 +70,241 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Cesium.js"></script>
-  <script src="./app.js?v=baseline-1"></script>
+  <div id="fatalError"></div>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/cesium@1.123/Build/Cesium/Cesium.js"
+    onerror="window.__showFatal('Грешка: Cesium библиотеката не се зареди от CDN.')">
+  </script>
+
+  <script>
+  (async function () {
+    'use strict';
+
+    const loadState = document.getElementById('loadState');
+    const measureBtn = document.getElementById('measureBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const homeBtn = document.getElementById('homeBtn');
+    const measureHint = document.getElementById('measureHint');
+    const container = document.getElementById('cesiumContainer');
+
+    function state(text, cls='') {
+      loadState.textContent = text;
+      loadState.className = ('load-state ' + cls).trim();
+    }
+
+    if (!window.Cesium) {
+      state('Грешка: Cesium не е зареден', 'error');
+      window.__showFatal('Грешка: Cesium не е зареден.');
+      return;
+    }
+
+    let viewer;
+    let tileset = null;
+    let measuring = false;
+    let firstPoint = null;
+    const measurementEntities = [];
+
+    try {
+      state('Инициализация на 3D изгледа…');
+
+      viewer = new Cesium.Viewer('cesiumContainer', {
+        animation: false,
+        timeline: false,
+        baseLayerPicker: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        navigationHelpButton: false,
+        infoBox: false,
+        selectionIndicator: false,
+        fullscreenButton: false,
+        vrButton: false,
+        baseLayer: false,
+        globe: false,
+        skyBox: false,
+        skyAtmosphere: false,
+        shadows: false,
+        shouldAnimate: false,
+        requestRenderMode: true,
+        maximumRenderTimeChange: Infinity
+      });
+
+      const scene = viewer.scene;
+      scene.backgroundColor = Cesium.Color.fromCssColorString('#101216');
+      scene.pickTranslucentDepth = true;
+
+      if (scene.fog) scene.fog.enabled = false;
+      if (scene.postProcessStages && scene.postProcessStages.fxaa) {
+        scene.postProcessStages.fxaa.enabled = true;
+      }
+
+      // Никакво "самодвижение" от инерция.
+      const controller = scene.screenSpaceCameraController;
+      controller.minimumZoomDistance = 0.2;
+      controller.inertiaSpin = 0.0;
+      controller.inertiaTranslate = 0.0;
+      controller.inertiaZoom = 0.0;
+
+      state('Зареждане на tileset.json…');
+
+      // ВАЖНО:
+      // SSE 8 кара Cesium да слезе до реалните L14/L15 B3DM плочки,
+      // но да НЕ влиза в прекалено дълбоките Terra LOD разклонения.
+      tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json?stable=6', {
+        maximumScreenSpaceError: 8,
+        skipLevelOfDetail: false,
+        preferLeaves: false,
+        dynamicScreenSpaceError: false,
+        foveatedScreenSpaceError: false,
+        cullRequestsWhileMoving: true,
+        cullWithChildrenBounds: true,
+        preloadWhenHidden: false,
+        preloadFlightDestinations: false
+      });
+
+      scene.primitives.add(tileset);
+
+      state('Позициониране на модела…');
+
+      await viewer.zoomTo(
+        tileset,
+        new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(25),
+          Cesium.Math.toRadians(-28),
+          0
+        )
+      );
+
+      viewer.camera.cancelFlight();
+      viewer.clock.shouldAnimate = false;
+      scene.requestRender();
+
+      state('Моделът е готов · STABLE v6', 'ok');
+
+      tileset.tileFailed.addEventListener(function(err) {
+        console.warn('Tile failed:', err);
+      });
+
+    } catch (err) {
+      console.error(err);
+      const msg = err && err.message ? err.message : String(err);
+      state('Грешка: ' + msg, 'error');
+      window.__showFatal('Грешка при зареждане на модела:\n' + msg);
+      return;
+    }
+
+    function clearMeasurements() {
+      measurementEntities.splice(0).forEach(e => viewer.entities.remove(e));
+      firstPoint = null;
+      if (measuring) measureHint.textContent = 'Избери първа точка';
+      viewer.scene.requestRender();
+    }
+
+    function setMeasuring(on) {
+      measuring = on;
+      firstPoint = null;
+      measureBtn.classList.toggle('active', on);
+      measureBtn.setAttribute('aria-pressed', String(on));
+      measureHint.hidden = !on;
+      container.classList.toggle('measuring', on);
+      if (on) measureHint.textContent = 'Избери първа точка';
+      viewer.scene.requestRender();
+    }
+
+    function formatDistance(m) {
+      if (m < 1) return (m * 100).toFixed(1) + ' cm';
+      if (m < 10) return m.toFixed(3) + ' m';
+      return m.toFixed(2) + ' m';
+    }
+
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    handler.setInputAction(function(movement) {
+      if (!measuring) return;
+
+      let pos;
+      try {
+        pos = viewer.scene.pickPosition(movement.position);
+      } catch (_) {
+        return;
+      }
+
+      if (!Cesium.defined(pos)) {
+        measureHint.textContent = 'Щракни върху самия модел';
+        return;
+      }
+
+      const point = viewer.entities.add({
+        position: pos,
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.YELLOW,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 2,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+      measurementEntities.push(point);
+
+      if (!firstPoint) {
+        firstPoint = Cesium.Cartesian3.clone(pos);
+        measureHint.textContent = 'Избери втора точка';
+        viewer.scene.requestRender();
+        return;
+      }
+
+      const dist = Cesium.Cartesian3.distance(firstPoint, pos);
+      const mid = Cesium.Cartesian3.midpoint(firstPoint, pos, new Cesium.Cartesian3());
+
+      const line = viewer.entities.add({
+        polyline: {
+          positions: [firstPoint, pos],
+          width: 4,
+          material: Cesium.Color.YELLOW
+        }
+      });
+
+      const label = viewer.entities.add({
+        position: mid,
+        label: {
+          text: formatDistance(dist),
+          font: '600 15px Arial',
+          fillColor: Cesium.Color.WHITE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.BLACK.withAlpha(0.8),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY
+        }
+      });
+
+      measurementEntities.push(line, label);
+      firstPoint = null;
+      measureHint.textContent = 'Измерено: ' + formatDistance(dist);
+      viewer.scene.requestRender();
+
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+    measureBtn.addEventListener('click', () => setMeasuring(!measuring));
+    clearBtn.addEventListener('click', clearMeasurements);
+
+    homeBtn.addEventListener('click', async () => {
+      if (!tileset) return;
+      await viewer.zoomTo(
+        tileset,
+        new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(25),
+          Cesium.Math.toRadians(-28),
+          0
+        )
+      );
+      viewer.camera.cancelFlight();
+      viewer.scene.requestRender();
+    });
+
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') setMeasuring(false);
+    });
+
+  })();
+  </script>
 </body>
 </html>
