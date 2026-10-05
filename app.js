@@ -352,7 +352,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'block54-notes.json';
+    a.download = 'stadium-notes.json';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -378,9 +378,9 @@
       setLoadState('Зареждане на модела…');
 
       tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
-        maximumScreenSpaceError: isMobile ? 5 : 2.5,
+        maximumScreenSpaceError: 100000000000,
         skipLevelOfDetail: false,
-        preferLeaves: true,
+        preferLeaves: false,
         dynamicScreenSpaceError: false,
         foveatedScreenSpaceError: false,
         cullRequestsWhileMoving: false,
@@ -393,7 +393,7 @@
       tileset.maximumMemoryUsage = isMobile ? 384 : 1024;
       await viewer.zoomTo(tileset);
       viewer.camera.lookUp(Cesium.Math.toRadians(6));
-      setLoadState('Моделът е готов · STABLE ENGINE', 'ok');
+      setLoadState('Моделът е готов · FIXED LOD v5', 'ok');
       renderNotes();
       requestRender();
     } catch (error) {
