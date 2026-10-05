@@ -55,7 +55,13 @@
   viewer.scene.fog.enabled = false;
   viewer.scene.pickTranslucentDepth = true;
   viewer.scene.postProcessStages.fxaa.enabled = true;
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 0.2;
+  const cameraController = viewer.scene.screenSpaceCameraController;
+  cameraController.minimumZoomDistance = 0.2;
+  cameraController.inertiaSpin = 0;
+  cameraController.inertiaTranslate = 0;
+  cameraController.inertiaZoom = 0;
+  // Disable Cesium's default double-click entity tracking/zoom action.
+  viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
   let tileset = null;
   let mode = 'none'; // none | distance | area | addNote
@@ -245,72 +251,24 @@
     requestRender();
   }
 
-  function getViewTransformData() {
-    const sphere = tileset.boundingSphere;
-    const center = sphere.center;
-    const radius = sphere.radius;
-    const transform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
-    const east = Cesium.Matrix4.getColumn(transform, 0, new Cesium.Cartesian4());
-    const north = Cesium.Matrix4.getColumn(transform, 1, new Cesium.Cartesian4());
-    const up = Cesium.Matrix4.getColumn(transform, 2, new Cesium.Cartesian4());
-    const E = new Cesium.Cartesian3(east.x, east.y, east.z);
-    const N = new Cesium.Cartesian3(north.x, north.y, north.z);
-    const U = new Cesium.Cartesian3(up.x, up.y, up.z);
-    return { center, radius, E, N, U };
-  }
-
+  // Instant, model-centred views. Range 0 fits the entire bounding sphere.
   function setDirectionalView(kind) {
-  if (!tileset) return;
-
-  const headings = {
-    top: 0,
-    front: 0,
-    back: 180,
-    left: 90,
-    right: 270
-  };
-
-  viewer.camera.cancelFlight();
-
-  viewer.camera.viewBoundingSphere(
-    tileset.boundingSphere,
-    new Cesium.HeadingPitchRange(
-      Cesium.Math.toRadians(headings[kind] ?? 0),
-      Cesium.Math.toRadians(kind === 'top' ? -90 : -10),
-      0
-    )
-  );
-
-  viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
-  viewer.scene.requestRender();
-}
-
-    if (kind === 'top') {
-      destination = Cesium.Cartesian3.add(center, Cesium.Cartesian3.multiplyByScalar(U, top, new Cesium.Cartesian3()), new Cesium.Cartesian3());
-      orientation = { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 };
-    } else if (kind === 'front') {
-      destination = Cesium.Cartesian3.add(center,
-        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(N, -side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.45, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3());
-      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
-    } else if (kind === 'back') {
-      destination = Cesium.Cartesian3.add(center,
-        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(N, side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.45, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3());
-      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
-    } else if (kind === 'left') {
-      destination = Cesium.Cartesian3.add(center,
-        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(E, -side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.35, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3());
-      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
-    } else if (kind === 'right') {
-      destination = Cesium.Cartesian3.add(center,
-        Cesium.Cartesian3.add(Cesium.Cartesian3.multiplyByScalar(E, side, new Cesium.Cartesian3()), Cesium.Cartesian3.multiplyByScalar(U, radius * 0.35, new Cesium.Cartesian3()), new Cesium.Cartesian3()),
-        new Cesium.Cartesian3());
-      orientation = { direction: Cesium.Cartesian3.subtract(center, destination, new Cesium.Cartesian3()), up: U };
-    }
-
-    viewer.camera.flyTo({ destination, orientation, duration: 0.9 });
+    if (!tileset) return;
+    const headings = { home: 35, top: 0, front: 0, back: 180, left: 90, right: 270 };
+    const pitch = kind === 'top' ? -90 : (kind === 'home' ? -30 : -10);
+    viewer.camera.cancelFlight();
+    viewer.trackedEntity = undefined;
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    viewer.camera.viewBoundingSphere(
+      tileset.boundingSphere,
+      new Cesium.HeadingPitchRange(
+        Cesium.Math.toRadians(headings[kind] ?? 35),
+        Cesium.Math.toRadians(pitch),
+        0
+      )
+    );
+    viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+    requestRender();
   }
 
   function getStoredNotes() {
@@ -408,9 +366,8 @@
 
       viewer.scene.primitives.add(tileset);
       tileset.maximumMemoryUsage = isMobile ? 384 : 1024;
-      await viewer.zoomTo(tileset);
-      viewer.camera.lookUp(Cesium.Math.toRadians(6));
-      setLoadState('Моделът е готов', 'ok');
+      setDirectionalView('home');
+      setLoadState('Моделът е готов · версия 2', 'ok');
       renderNotes();
       requestRender();
     } catch (error) {
@@ -516,7 +473,7 @@
     else await document.exitFullscreen();
   });
 
-  viewBtns.home.addEventListener('click', async () => { if (tileset) await viewer.zoomTo(tileset); requestRender(); });
+  viewBtns.home.addEventListener('click', () => setDirectionalView('home'));
   viewBtns.top.addEventListener('click', () => setDirectionalView('top'));
   viewBtns.front.addEventListener('click', () => setDirectionalView('front'));
   viewBtns.back.addEventListener('click', () => setDirectionalView('back'));
